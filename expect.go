@@ -180,7 +180,7 @@ func (e *Expect) ExpectAny(pattern string, re *regexp.Regexp, timeout time.Durat
 }
 
 // Interact gives control of the child process to the interactive user (the human at the keyboard).
-func (e *Expect) Interact(re *regexp.Regexp, timeout time.Duration) error {
+func (e *Expect) Interact() error {
 	err := e.reader.Close()
 	if err != nil {
 		return err
