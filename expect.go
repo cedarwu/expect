@@ -1,3 +1,6 @@
+// Copyright 2021 cedar, cedarty@gmail.com.
+
+// Package expect is a Go version of the classic TCL Expect.
 package expect
 
 import (
