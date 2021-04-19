@@ -34,14 +34,16 @@ type Expect struct {
 	cmd *exec.Cmd
 	// timeout contains the default timeout for a spawned command
 	timeout time.Duration
-	// oldState holds the old state of terminal
-	oldState *term.State
 	// reader is internal reader of output from spawned process
 	reader *os.File
 	// scanner scans output from reader
 	scanner *bufio.Scanner
 	// writer write to stdin
 	writer *bufio.Writer
+	// oldState holds the old state of terminal
+	oldState *term.State
+	//
+	signalCh chan os.Signal
 }
 
 // Spawn starts a process
@@ -53,6 +55,7 @@ func Spawn(command string, timeout time.Duration) (*Expect, error) {
 		timeout = DefaultTimeout
 	}
 
+	fmt.Println(command)
 	commands := strings.Fields(command)
 	cmd := exec.Command(commands[0], commands[1:]...)
 
@@ -62,23 +65,31 @@ func Spawn(command string, timeout time.Duration) (*Expect, error) {
 		return nil, err
 	}
 
-	// Handle pty size
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGWINCH)
-	go func() {
-		for range ch {
-			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
-				log.Fatalf("error resizing pty: %s", err)
-			}
-		}
-	}()
-	ch <- syscall.SIGWINCH // Initial resize
-
 	e := &Expect{
 		pty:     ptmx,
 		cmd:     cmd,
 		timeout: timeout,
 	}
+
+	e.signalCh = make(chan os.Signal, 1)
+	signal.Notify(e.signalCh, syscall.SIGWINCH)
+	go func() {
+		for sig := range e.signalCh {
+			switch sig {
+			// handle pty size
+			case syscall.SIGWINCH:
+				if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
+					log.Fatalf("error resizing pty: %s", err)
+				}
+
+			default:
+				log.Fatalf("Unknown signal: %v", sig)
+				_ = e.Wait()
+				os.Exit(-1)
+			}
+		}
+	}()
+	e.signalCh <- syscall.SIGWINCH // Initial resize
 
 	// Set stdin in raw mode
 	e.oldState, err = term.MakeRaw(int(os.Stdin.Fd()))
@@ -97,6 +108,7 @@ func Spawn(command string, timeout time.Duration) (*Expect, error) {
 	go func() {
 		writer := io.MultiWriter(os.Stdout, pipeWriter)
 		_, _ = io.Copy(writer, ptmx)
+		pipeWriter.Close()
 	}()
 
 	// Copy stdin to the pty
@@ -171,12 +183,15 @@ func (e *Expect) ExpectAny(pattern string, re *regexp.Regexp, timeout time.Durat
 			}
 		}
 	}
+
+	e.Wait()
+
 	if e.scanner.Err() != nil {
 		return "", e.scanner.Err()
 	}
 
-	// should not run to here
-	return "", errors.New("unknown error")
+	// cmd exit
+	return "", errors.New("command exit")
 }
 
 // Interact gives control of the child process to the interactive user (the human at the keyboard).
@@ -187,5 +202,28 @@ func (e *Expect) Interact() error {
 	}
 
 	_, _ = io.Copy(os.Stdout, e.pty)
+	return nil
+}
+
+// Wait wait for process finish and do clean jobs.
+// Wait should be the last call to Expect.
+func (e *Expect) Wait() error {
+
+	_ = e.cmd.Wait()
+
+	err := e.pty.Close()
+	if err != nil {
+		return err
+	}
+
+	signal.Stop(e.signalCh)
+	close(e.signalCh)
+
+	// restore terminal state before
+	err = term.Restore(int(os.Stdin.Fd()), e.oldState)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
