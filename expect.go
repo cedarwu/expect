@@ -21,11 +21,8 @@ import (
 	"golang.org/x/term"
 )
 
-// DefaultTimeout is the default expect timeout
+// DefaultTimeout is the default expect timeout.
 const DefaultTimeout = 60 * time.Second
-
-// checkDuration how often to check for new output.
-const checkDuration = 2 * time.Second
 
 type Expect struct {
 	// pty holds the pseudo-terminal tty
@@ -42,11 +39,11 @@ type Expect struct {
 	writer *bufio.Writer
 	// oldState holds the old state of terminal
 	oldState *term.State
-	//
+	// signalCh receive certain signals from system
 	signalCh chan os.Signal
 }
 
-// Spawn starts a process
+// Spawn starts a process.
 func Spawn(command string, timeout time.Duration) (*Expect, error) {
 	if len(command) == 0 {
 		return nil, errors.New("invalid command")
@@ -55,7 +52,6 @@ func Spawn(command string, timeout time.Duration) (*Expect, error) {
 		timeout = DefaultTimeout
 	}
 
-	fmt.Println(command)
 	commands := strings.Fields(command)
 	cmd := exec.Command(commands[0], commands[1:]...)
 
@@ -104,7 +100,7 @@ func Spawn(command string, timeout time.Duration) (*Expect, error) {
 	}
 	e.scanner = bufio.NewScanner(e.reader)
 
-	// copy pty output to stdout and internal reader for expect
+	// Copy pty output to stdout and internal reader for expect
 	go func() {
 		writer := io.MultiWriter(os.Stdout, pipeWriter)
 		_, _ = io.Copy(writer, ptmx)
@@ -119,7 +115,7 @@ func Spawn(command string, timeout time.Duration) (*Expect, error) {
 	return e, nil
 }
 
-// String implements the stringer interface
+// String implements the stringer interface.
 func (e *Expect) String() string {
 	res := fmt.Sprintf("%p: ", e)
 	if e.pty != nil {
@@ -131,21 +127,21 @@ func (e *Expect) String() string {
 	return res
 }
 
-// Write writes bytes b to stdin
+// Write writes bytes b to stdin.
 func (e *Expect) Write(b []byte) (int, error) {
-	// c.Logf("console write: %q", b)
+	// log.Printf("console write: %q", b)
 	return e.pty.Write(b)
 }
 
-// Send writes string s to stdin
+// Send writes string s to stdin.
 func (e *Expect) Send(s string) (int, error) {
-	// c.Logf("console write: %v", s)
+	// log.Printf("console write: %v", s)
 	return e.pty.WriteString(s)
 }
 
-// SendLine writes string s with newline to stdin
+// SendLine writes string s with newline to stdin.
 func (e *Expect) SendLine(s string) (int, error) {
-	// c.Logf("console write: %v", s)
+	// log.Printf("console write: %v", s)
 	return e.pty.WriteString(s + "\n")
 }
 
@@ -184,6 +180,7 @@ func (e *Expect) ExpectAny(pattern string, re *regexp.Regexp, timeout time.Durat
 		}
 	}
 
+	// did not found the expected output
 	e.Wait()
 
 	if e.scanner.Err() != nil {

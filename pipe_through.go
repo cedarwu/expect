@@ -6,15 +6,15 @@ import (
 	"time"
 )
 
-// PipeThrough is a Reader with read deadline
-// If a timeout is reached, the error is returned
-// If the provided io.Reader reads error, the error is also returned
+// PipeThrough is a Reader with read deadline.
+// If a timeout is reached, the error is returned.
+// If the provided io.Reader reads error, the error is also returned.
 type PipeThrough struct {
 	reader *os.File
 	errCh  chan error
 }
 
-// NewPassthroughPipe returns a new reader for a io.Reader with no read timeout
+// NewPassthroughPipe returns a new reader for a io.Reader with no read timeout.
 func NewPipeThrough(reader io.Reader) (*PipeThrough, error) {
 	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
@@ -32,7 +32,7 @@ func NewPipeThrough(reader io.Reader) (*PipeThrough, error) {
 		// Closing the pipeWriter will unblock the pipeReader.Read.
 		err = pipeWriter.Close()
 		if err != nil {
-			panic(err)
+			// panic(err)
 			return
 		}
 
@@ -52,8 +52,8 @@ func (pt *PipeThrough) Read(p []byte) (n int, err error) {
 			return n, err
 		}
 
-		// If the pipe is closed, this is the second time calling Read on
-		// PassthroughPipe, so just return the error from the os.Pipe io.Reader.
+		// If the pipe is closed, this is the second time calling Read on PipeThrough,
+		// so just return the error from the os.Pipe io.Reader.
 		perr, ok := <-pt.errCh
 		if !ok {
 			return n, err
